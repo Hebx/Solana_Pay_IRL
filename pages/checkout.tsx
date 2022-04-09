@@ -7,6 +7,7 @@ import BackLink from "../components/BackLink";
 import Loading from "../components/Loading";
 import { MakeTransactionInputData, MakeTransactionOutputData } from "./api/makeTransaction";
 import { useConnection } from "@solana/wallet-adapter-react";
+import { findTransactionSignature, FindTransactionSignatureError } from "@solana/pay";
 
 
 export default function Checkout() {
@@ -91,6 +92,28 @@ export default function Checkout() {
     trySendTransaction();
   }, [transaction])
 
+// Check every 5 sec if the transaction is finished
+  useEffect(() => {
+    const interval = setInterval(async () => {
+    try {
+   // check if there is any transaction for the reference
+    const signatureInfo = await findTransactionSignature(connection, reference, {});
+    router.push('/confirmed')
+    } catch (e) {
+      if (e instanceof FindTransactionSignatureError) {
+        // No Transaction found yet
+        return;
+      }
+      console.error('Unknown error', e)
+    }
+  }, 500)
+  return () => {
+    clearInterval(interval);
+  }
+  }, [])
+
+
+  // RENDER
   if (!publicKey) {
     return (
       <div className='flex flex-col gap-8 items-center'>
