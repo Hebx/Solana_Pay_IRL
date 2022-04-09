@@ -1,14 +1,13 @@
+import { createTransferCheckedInstruction, getAssociatedTokenAddress, getMint } from "@solana/spl-token"
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base'
 import {
   clusterApiUrl,
   Connection,
   PublicKey,
   Transaction,
-  SystemProgram,
-  LAMPORTS_PER_SOL,
 } from '@solana/web3.js'
 import { NextApiRequest, NextApiResponse } from 'next'
-import { shopAddress } from '../../lib/addresses'
+import { shopAddress, usdcAddress } from '../../lib/addresses'
 import calculatePrice from '../../lib/calculatePrice'
 
 export type MakeTransactionInputData = {
@@ -53,20 +52,31 @@ export default async function handler(
     const endpoint = clusterApiUrl(network)
     const connection = new Connection(endpoint)
 
+    // Metadata Details about USDC token
+    const usdcMint = await getMint(connection ,usdcAddress);
+    // Buyer USDC token account address
+    const buyerUsdcAddress = await getAssociatedTokenAddress(usdcAddress, buyerPublicKey);
+    // Shop USDC token account address
+    const shopUsdcAddress = await getAssociatedTokenAddress(usdcAddress, shopPublicKey);
+
     // get a recent blockhash to include in the transaction
     const { blockhash } = await connection.getLatestBlockhash('finalized')
+
     const transaction = new Transaction({
       recentBlockhash: blockhash,
       // the buyer pays the transaction fee
       feePayer: buyerPublicKey,
     })
 
-    // create the instruction to send SOL from the buyer to the shop
-    const transferInstruction = SystemProgram.transfer({
-      fromPubkey: buyerPublicKey,
-      lamports: amount.multipliedBy(LAMPORTS_PER_SOL).toNumber(),
-      toPubkey: shopPublicKey,
-    })
+    // create the instruction to send USDC from the buyer to the shop
+    const transferInstruction = createTransferCheckedInstruction(
+      buyerUsdcAddress,
+      usdcAddress,
+      shopUsdcAddress,
+      buyerPublicKey,
+      amount.toNumber() * (10 ** (await usdcMint).decimals),
+      usdcMint.decimals,
+    )
 
     // add the ref to the instruction as a key
     // transaction is returned when we query for the ref
