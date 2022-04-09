@@ -4,14 +4,15 @@ import { Keypair, Transaction } from "@solana/web3.js";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import BackLink from "../components/BackLink";
-import PageHeading from "../components/PageHeading";
 import Loading from "../components/Loading";
-import calculatePrice from "../lib/calculatePrice";
 import { MakeTransactionInputData, MakeTransactionOutputData } from "./api/makeTransaction";
+import { useConnection } from "@solana/wallet-adapter-react";
+
 
 export default function Checkout() {
   const router = useRouter()
-  const {publicKey} = useWallet();
+  const {publicKey, sendTransaction} = useWallet();
+  const {connection} = useConnection();
 
   // state to hold the API response fields
   const [transaction, setTransaction] = useState<Transaction | null>(null);
@@ -42,9 +43,11 @@ export default function Checkout() {
     if (!publicKey) {
       return;
     }
+
     const body: MakeTransactionInputData = {
       account: publicKey.toString(),
     }
+
     const response = await fetch(`/api/makeTransaction?${searchParams.toString()}`, {
       method: 'POST',
       headers: {
@@ -52,7 +55,9 @@ export default function Checkout() {
       },
       body: JSON.stringify(body),
     })
+
     const json = await response.json() as MakeTransactionOutputData;
+
     if (response.status !== 200) {
       console.error(json);
       return;
@@ -68,6 +73,23 @@ export default function Checkout() {
   useEffect(() => {
     getTransaction();
   }, [publicKey])
+
+  // send the fetched transaction to the connected wallet
+  async function trySendTransaction() {
+    if (!transaction) {
+      return;
+    }
+    try {
+      await sendTransaction(transaction, connection);
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  // send the transaction once it's fetched
+  useEffect(() => {
+    trySendTransaction();
+  }, [transaction])
 
   if (!publicKey) {
     return (
