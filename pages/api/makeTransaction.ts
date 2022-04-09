@@ -74,7 +74,7 @@ export default async function handler(
       usdcAddress,
       shopUsdcAddress,
       buyerPublicKey,
-      amount.toNumber() * (10 ** (await usdcMint).decimals),
+      amount.toNumber() * (10 ** usdcMint.decimals),
       usdcMint.decimals,
     )
 

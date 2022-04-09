@@ -43,7 +43,7 @@ export default function Confirmed() {
 			pathTransitionDuration: 3.0,
           })}
         >
-          <p style={{fontSize: 50}}>{done ? "✅" : "🍪"} </p>
+          <p style={{fontSize: 50}}>{done ? "🍻" : "🍺"} </p>
           <Confetti active={done} config={confettiConfig} />
         </CircularProgressbarWithChildren>
       </div>

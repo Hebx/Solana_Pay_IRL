@@ -7,7 +7,7 @@ export default function HomePage() {
   const { publicKey } = useWallet()
   return (
     <div className="m-auto flex max-w-4xl flex-col items-stretch gap-8 pt-24">
-      <SiteHeading>Cookies Inc</SiteHeading>
+      <SiteHeading>Beers Inc</SiteHeading>
 
       {/* Solana Wallet Connect Button */}
       <div className="basis-1/4">
