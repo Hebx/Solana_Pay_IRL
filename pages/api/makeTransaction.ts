@@ -1,4 +1,5 @@
-import { createTransferCheckedInstruction, getAssociatedTokenAddress, getMint } from "@solana/spl-token"
+import { Keypair } from '@solana/web3.js';
+import { createTransferCheckedInstruction, getAssociatedTokenAddress, getMint, getOrCreateAssociatedTokenAccount } from "@solana/spl-token"
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base'
 import {
   clusterApiUrl,
@@ -7,8 +8,9 @@ import {
   Transaction,
 } from '@solana/web3.js'
 import { NextApiRequest, NextApiResponse } from 'next'
-import { shopAddress, usdcAddress } from '../../lib/addresses'
+import { couponAddress, shopAddress, usdcAddress } from '../../lib/addresses'
 import calculatePrice from '../../lib/calculatePrice'
+import base58 from 'bs58';
 
 export type MakeTransactionInputData = {
   account: string
@@ -58,11 +60,31 @@ async function post(
       res.status(400).json({ error: `Missing account` })
       return
     }
+
+    // we get the shop private key from .env
+    const shopPrivateKey = process.env.SHOP_PRIVATE_KEY as string
+    if (!shopPrivateKey) {
+      res.status(500).json({ error: "Shop private key not available" })
+    }
+    const shopKeypair = Keypair.fromSecretKey(base58.decode(shopPrivateKey))
+
     const buyerPublicKey = new PublicKey(account)
     const shopPublicKey = shopAddress
     const network = WalletAdapterNetwork.Devnet
     const endpoint = clusterApiUrl(network)
     const connection = new Connection(endpoint)
+
+    // Get the buyer and seller coupon token accounts
+    // Buyer one may not exist, so we create it as the shop account
+    const buyerCouponAddress = await getOrCreateAssociatedTokenAccount(
+      connection,
+      shopKeypair, // shop pays the fee to create it
+      couponAddress, // which token the account is for
+      buyerPublicKey, //owner of the buyer token
+    ).then(account => account.address)
+
+    const shopCouponAddress = await getAssociatedTokenAddress(couponAddress, shopPublicKey)
+
 
     // Metadata Details about USDC token
     const usdcMint = await getMint(connection ,usdcAddress);
@@ -98,8 +120,22 @@ async function post(
       isWritable: false,
     })
 
-    // add the instruction to the transaction
-    transaction.add(transferInstruction)
+ // Create the instruction to send the coupon from the shop to the buyer
+const couponInstruction = createTransferCheckedInstruction(
+  shopCouponAddress, // source account (coupon)
+  couponAddress, // token address (coupon)
+  buyerCouponAddress, // destination account (coupon)
+  shopPublicKey, // owner of source account
+  1, // amount to transfer
+  0, // decimals of the token
+)
+
+// Add both instructions to the transaction
+transaction.add(transferInstruction, couponInstruction)
+
+    // Sign the transaction as the shop, which is required to transfer the coupon
+    // We must partial sign because the transfer instruction still requires the user
+    transaction.partialSign(shopKeypair)
 
     // serialize the transaction and convert to base64 to return it
     const serializedTransaction = transaction.serialize({

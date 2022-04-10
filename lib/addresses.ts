@@ -5,4 +5,6 @@ export const shopAddress = new PublicKey('4tmZZbhYrdnSnbNpMCyx33JHkpcFxrMAcxQY2X
 
 export const usdcAddress = new PublicKey('Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr')
 
+export const couponAddress = new PublicKey('EjMXMBBS34JmEKpb884FNZMw1EbhD2bEL4P1mDFCkmPP')
+
 
