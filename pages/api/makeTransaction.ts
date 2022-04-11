@@ -74,12 +74,25 @@ async function post(
     const endpoint = clusterApiUrl(network)
     const connection = new Connection(endpoint)
 
+// Get the buyer and seller coupon token accounts
+// Buyer one may not exist, so we create it as the shop account
+const buyerCouponAccount = await getOrCreateAssociatedTokenAccount(
+  connection,
+  shopKeypair, // fees payed by shop
+  couponAddress, // token of account
+  buyerPublicKey, // owner of the the buyer token
+)
+const shopCouponddress = await getAssociatedTokenAddress(couponAddress, shopPublicKey)
+
+// at least 5 coupons to get a discount
+const buyerGetsCouponDiscount = buyerCouponAccount.amount >= 5
+
     // Get the buyer and seller coupon token accounts
     // Buyer one may not exist, so we create it as the shop account
     const buyerCouponAddress = await getOrCreateAssociatedTokenAccount(
       connection,
-      shopKeypair, // shop pays the fee to create it
-      couponAddress, // which token the account is for
+      shopKeypair, // fees payed by shop
+      couponAddress, // token of account
       buyerPublicKey, //owner of the buyer token
     ).then(account => account.address)
 
@@ -102,6 +115,9 @@ async function post(
       feePayer: buyerPublicKey,
     })
 
+    // If the buyer has the coupon discount, divide the amount in USDC by 2
+    const amountToPay = buyerGetsCouponDiscount ? amount.dividedBy(2) : amount
+
     // create the instruction to send USDC from the buyer to the shop
     const transferInstruction = createTransferCheckedInstruction(
       buyerUsdcAddress,
@@ -121,14 +137,35 @@ async function post(
     })
 
  // Create the instruction to send the coupon from the shop to the buyer
-const couponInstruction = createTransferCheckedInstruction(
-  shopCouponAddress, // source account (coupon)
+const couponInstruction = buyerGetsCouponDiscount ?
+// The coupon instruction is to send 5 coupons from the buyer to the shop
+createTransferCheckedInstruction(
+  buyerCouponAccount.address, // source account (coupon)
   couponAddress, // token address (coupon)
   buyerCouponAddress, // destination account (coupon)
-  shopPublicKey, // owner of source account
-  1, // amount to transfer
+  buyerPublicKey, // owner of source account
+  5, // amount to transfer
   0, // decimals of the token
-)
+) :
+  // The coupon instruction is to send 1 coupon from the shop to the buyer
+  createTransferCheckedInstruction(
+    shopCouponAddress, // source account (coupon)
+    couponAddress, // token address (coupon)
+    buyerCouponAccount.address, // destination account (coupon)
+    shopPublicKey, // owner of source account
+    1, // amount to transfer
+    0, // decimals of the token 0
+  )
+
+     // Add the shop as a signer to the coupon instruction
+    // If the shop is sending a coupon, it already will be a signer
+    // But if the buyer is sending the coupons, the shop won't be a signer automatically
+    // It's useful security to have the shop sign the transaction
+    couponInstruction.keys.push({
+      pubkey: shopPublicKey,
+      isSigner: true,
+      isWritable: false,
+    })
 
 // Add both instructions to the transaction
 transaction.add(transferInstruction, couponInstruction)
@@ -145,10 +182,12 @@ transaction.add(transferInstruction, couponInstruction)
     const base64 = serializedTransaction.toString('base64')
 
     // insert into a database: info and amount
+    const message = buyerGetsCouponDiscount ? "50% Discount! 🍺" : "Thanks for your order! 🍺"
+
     //  return the serialized transaction
     res.status(200).json({
       transaction: base64,
-      message: 'Thanks for your order 🔥',
+      message,
     })
   } catch (error) {
     console.error(error)
